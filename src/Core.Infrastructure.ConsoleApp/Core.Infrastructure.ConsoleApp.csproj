@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- .NET Tool Configuration -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>dotx</ToolCommandName>
+    <PackageId>Ave.DotnetTool.DotX</PackageId>
+    <IsPackable>true</IsPackable>
+
+    <!-- Package Metadata -->
+    <Authors>Aad Versteeg</Authors>
+    <Company>Versteeg IT Solutions</Company>
+    <Description>Execute .NET tools without installation - optimized for MCP servers. Automatically updates to latest version unless pinned.</Description>
+    <PackageTags>dotnet;tool;mcp;npx;cli;executor</PackageTags>
+    <PackageProjectUrl>https://github.com/aadversteeg/dotx</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/aadversteeg/dotx</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+    <!-- Version (0.0.0 - updated by CI/CD) -->
+    <AssemblyVersion>0.0.0</AssemblyVersion>
+    <FileVersion>0.0.0</FileVersion>
+    <Version>0.0.0</Version>
+
+    <!-- Source Link -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Core.Application\Core.Application.csproj" />
+    <ProjectReference Include="..\Core.Infrastructure.Nuget\Core.Infrastructure.Nuget.csproj" />
+  </ItemGroup>
+
+</Project>

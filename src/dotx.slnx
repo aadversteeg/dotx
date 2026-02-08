@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="Core.Application/Core.Application.csproj" />
+  <Project Path="Core.Domain/Core.Domain.csproj" />
+  <Project Path="Core.Infrastructure.ConsoleApp/Core.Infrastructure.ConsoleApp.csproj" />
+  <Project Path="Core.Infrastructure.Nuget/Core.Infrastructure.Nuget.csproj" />
+  <Project Path="UnitTests.Application/UnitTests.Application.csproj" />
+  <Project Path="UnitTests.Domain/UnitTests.Domain.csproj" />
+  <Project Path="UnitTests.Infrastructure.Nuget/UnitTests.Infrastructure.Nuget.csproj" />
+</Solution>
