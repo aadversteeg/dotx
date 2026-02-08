@@ -1,3 +1,7 @@
+using System.Runtime.InteropServices;
+using Ave.Extensions.FileSystem;
+using Ave.Extensions.FileSystem.Local;
+using Ave.Extensions.FileSystem.Local.PathMappers;
 using Core.Application;
 using Core.Domain;
 using Core.Infrastructure.ConsoleApp.Services;
@@ -32,7 +36,7 @@ public class Program
         // Handle cache commands
         if (args[0] == "cache")
         {
-            var handler = new CacheCommandHandler(new NuGetClient(), new DotnetCacheManager(), Console.Out, Console.Error);
+            var handler = new CacheCommandHandler(new NuGetClient(), CreateCacheManager(), Console.Out, Console.Error);
             return await handler.HandleAsync(args.Skip(1).ToArray());
         }
 
@@ -84,10 +88,64 @@ public class Program
 
         var nuGetClient = new NuGetClient();
         var toolRunner = new DotnetToolRunner();
-        var cacheManager = new DotnetCacheManager();
+        var cacheManager = CreateCacheManager();
         var executor = new ToolExecutor(nuGetClient, toolRunner, cacheManager, logAction);
 
         return await executor.ExecuteAsync(toolSpec, toolArgs, skipUpdate);
+    }
+
+    /// <summary>
+    /// Creates a cache manager instance with the local file system.
+    /// </summary>
+    /// <returns>A configured cache manager.</returns>
+    private static ICacheManager CreateCacheManager()
+    {
+        var pathMapper = CreatePathMapper();
+        var fileSystem = new LocalFileSystem(pathMapper);
+        var cacheDirectory = GetNuGetPackagesCacheDirectory(pathMapper);
+        return new DotnetCacheManager(fileSystem, cacheDirectory);
+    }
+
+    /// <summary>
+    /// Creates the appropriate path mapper for the current platform.
+    /// </summary>
+    /// <returns>A path mapper for the current operating system.</returns>
+    private static IPathMapper CreatePathMapper()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return new WindowsPathMapper();
+        }
+        return new UnixPathMapper();
+    }
+
+    /// <summary>
+    /// Gets the NuGet packages cache directory as a canonical path.
+    /// </summary>
+    /// <param name="pathMapper">The path mapper to use for conversion.</param>
+    /// <returns>The canonical path to the NuGet packages cache.</returns>
+    private static CanonicalPath GetNuGetPackagesCacheDirectory(IPathMapper pathMapper)
+    {
+        // Check NUGET_PACKAGES environment variable first
+        var nugetPackages = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
+        if (!string.IsNullOrEmpty(nugetPackages))
+        {
+            var result = pathMapper.MapToCanonicalPath(nugetPackages);
+            if (result.IsSuccess)
+            {
+                return result.Value;
+            }
+        }
+
+        // Default locations:
+        // Windows: %USERPROFILE%\.nuget\packages
+        // Linux/macOS: ~/.nuget/packages
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var defaultPath = Path.Combine(userProfile, ".nuget", "packages");
+        var defaultResult = pathMapper.MapToCanonicalPath(defaultPath);
+
+        // This should never fail for a valid user profile path
+        return defaultResult.Value;
     }
 
     /// <summary>

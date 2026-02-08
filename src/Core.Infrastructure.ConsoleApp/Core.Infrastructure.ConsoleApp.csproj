@@ -36,6 +36,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+    <PackageReference Include="Ave.Extensions.FileSystem" Version="0.3.0-preview.1" />
+    <PackageReference Include="Ave.Extensions.FileSystem.Local" Version="0.3.0-preview.1" />
   </ItemGroup>
 
   <ItemGroup>

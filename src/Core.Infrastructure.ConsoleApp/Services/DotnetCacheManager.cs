@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using Ave.Extensions.FileSystem;
 using Core.Application;
 using Core.Domain;
 
@@ -9,32 +10,57 @@ namespace Core.Infrastructure.ConsoleApp.Services;
 /// </summary>
 public class DotnetCacheManager : ICacheManager
 {
+    private readonly IFileSystem _fileSystem;
+    private readonly CanonicalPath _cacheDirectory;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DotnetCacheManager"/> class.
+    /// </summary>
+    /// <param name="fileSystem">The file system to use for operations.</param>
+    /// <param name="cacheDirectory">The root cache directory path.</param>
+    public DotnetCacheManager(IFileSystem fileSystem, CanonicalPath cacheDirectory)
+    {
+        _fileSystem = fileSystem;
+        _cacheDirectory = cacheDirectory;
+    }
+
     /// <inheritdoc/>
-    public Task<IReadOnlyList<InstalledTool>> ListToolsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<InstalledTool>> ListToolsAsync(CancellationToken cancellationToken = default)
     {
         var tools = new List<InstalledTool>();
-        var cacheDir = GetNuGetPackagesCacheDirectory();
 
-        if (!Directory.Exists(cacheDir))
+        var cacheDirExists = await _fileSystem.DirectoryExistsAsync(_cacheDirectory, cancellationToken);
+        if (cacheDirExists.IsFailure || !cacheDirExists.Value)
         {
-            return Task.FromResult<IReadOnlyList<InstalledTool>>(tools);
+            return tools;
         }
 
-        foreach (var packageDir in Directory.GetDirectories(cacheDir))
+        var packageDirsResult = await _fileSystem.GetDirectoriesAsync(_cacheDirectory, "*", recursive: false, cancellationToken);
+        if (packageDirsResult.IsFailure)
+        {
+            return tools;
+        }
+
+        foreach (var packageDir in packageDirsResult.Value)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var packageId = Path.GetFileName(packageDir);
-            var versionDirs = Directory.GetDirectories(packageDir);
+            var packageId = packageDir.GetName();
 
-            foreach (var versionDir in versionDirs)
+            var versionDirsResult = await _fileSystem.GetDirectoriesAsync(packageDir, "*", recursive: false, cancellationToken);
+            if (versionDirsResult.IsFailure)
             {
-                var version = Path.GetFileName(versionDir);
+                continue;
+            }
+
+            foreach (var versionDir in versionDirsResult.Value)
+            {
+                var version = versionDir.GetName();
 
                 // Check if this is a .NET tool by looking for DotnetTool package type in nuspec
-                if (IsDotnetTool(versionDir))
+                if (await IsDotnetToolAsync(versionDir, cancellationToken))
                 {
-                    var command = GetToolCommand(versionDir, packageId);
+                    var command = await GetToolCommandAsync(versionDir, packageId, cancellationToken);
                     tools.Add(new InstalledTool(packageId, version, command));
                 }
             }
@@ -43,7 +69,7 @@ public class DotnetCacheManager : ICacheManager
         // Sort by package ID for consistent output
         tools.Sort((a, b) => string.Compare(a.PackageId, b.PackageId, StringComparison.OrdinalIgnoreCase));
 
-        return Task.FromResult<IReadOnlyList<InstalledTool>>(tools);
+        return tools;
     }
 
     /// <inheritdoc/>
@@ -61,24 +87,30 @@ public class DotnetCacheManager : ICacheManager
     }
 
     /// <inheritdoc/>
-    public Task<bool> RemoveToolAsync(string packageId, CancellationToken cancellationToken = default)
+    public async Task<bool> RemoveToolAsync(string packageId, CancellationToken cancellationToken = default)
     {
         try
         {
-            var cacheDir = GetNuGetPackagesCacheDirectory();
-            var packageDir = Path.Combine(cacheDir, packageId.ToLowerInvariant());
-
-            if (!Directory.Exists(packageDir))
+            var packageDirResult = _cacheDirectory.Append(packageId.ToLowerInvariant());
+            if (packageDirResult.IsFailure)
             {
-                return Task.FromResult(false);
+                return false;
             }
 
-            Directory.Delete(packageDir, recursive: true);
-            return Task.FromResult(true);
+            var packageDir = packageDirResult.Value;
+
+            var existsResult = await _fileSystem.DirectoryExistsAsync(packageDir, cancellationToken);
+            if (existsResult.IsFailure || !existsResult.Value)
+            {
+                return false;
+            }
+
+            var deleteResult = await _fileSystem.DeleteDirectoryAsync(packageDir, recursive: true, cancellationToken);
+            return deleteResult.IsSuccess;
         }
         catch
         {
-            return Task.FromResult(false);
+            return false;
         }
     }
 
@@ -103,60 +135,76 @@ public class DotnetCacheManager : ICacheManager
     }
 
     /// <inheritdoc/>
-    public Task<string?> GetToolExecutablePathAsync(string packageId, string? version = null, CancellationToken cancellationToken = default)
+    public async Task<string?> GetToolExecutablePathAsync(string packageId, string? version = null, CancellationToken cancellationToken = default)
     {
-        var cacheDir = GetNuGetPackagesCacheDirectory();
-        var packageDir = Path.Combine(cacheDir, packageId.ToLowerInvariant());
-
-        if (!Directory.Exists(packageDir))
+        var packageDirResult = _cacheDirectory.Append(packageId.ToLowerInvariant());
+        if (packageDirResult.IsFailure)
         {
-            return Task.FromResult<string?>(null);
+            return null;
+        }
+
+        var packageDir = packageDirResult.Value;
+
+        var existsResult = await _fileSystem.DirectoryExistsAsync(packageDir, cancellationToken);
+        if (existsResult.IsFailure || !existsResult.Value)
+        {
+            return null;
         }
 
         // If version not specified, find the latest version
         string? targetVersion = version;
         if (string.IsNullOrEmpty(targetVersion))
         {
-            targetVersion = GetLatestCachedVersion(packageDir);
+            targetVersion = await GetLatestCachedVersionAsync(packageDir, cancellationToken);
             if (targetVersion == null)
             {
-                return Task.FromResult<string?>(null);
+                return null;
             }
         }
 
-        var versionDir = Path.Combine(packageDir, targetVersion);
-        if (!Directory.Exists(versionDir))
+        var versionDirResult = packageDir.Append(targetVersion);
+        if (versionDirResult.IsFailure)
         {
-            return Task.FromResult<string?>(null);
+            return null;
+        }
+
+        var versionDir = versionDirResult.Value;
+
+        var versionExistsResult = await _fileSystem.DirectoryExistsAsync(versionDir, cancellationToken);
+        if (versionExistsResult.IsFailure || !versionExistsResult.Value)
+        {
+            return null;
         }
 
         // Verify this is a .NET tool
-        if (!IsDotnetTool(versionDir))
+        if (!await IsDotnetToolAsync(versionDir, cancellationToken))
         {
-            return Task.FromResult<string?>(null);
+            return null;
         }
 
         // Find the executable DLL by looking for .runtimeconfig.json
-        var executablePath = FindExecutableDll(versionDir);
-        return Task.FromResult(executablePath);
+        var executablePath = await FindExecutableDllAsync(versionDir, cancellationToken);
+        return executablePath;
     }
 
     /// <summary>
     /// Gets the latest version from cached version directories.
     /// </summary>
-    private static string? GetLatestCachedVersion(string packageDir)
+    private async Task<string?> GetLatestCachedVersionAsync(CanonicalPath packageDir, CancellationToken cancellationToken)
     {
-        var versionDirs = Directory.GetDirectories(packageDir);
-        if (versionDirs.Length == 0)
+        var versionDirsResult = await _fileSystem.GetDirectoriesAsync(packageDir, "*", recursive: false, cancellationToken);
+        if (versionDirsResult.IsFailure || versionDirsResult.Value.Count == 0)
         {
             return null;
         }
+
+        var versionDirs = versionDirsResult.Value;
 
         // Parse versions and find the latest
         var versions = new List<(string Dir, SemanticVersion? Version)>();
         foreach (var dir in versionDirs)
         {
-            var versionString = Path.GetFileName(dir);
+            var versionString = dir.GetName();
             if (SemanticVersion.TryParse(versionString, out var semVer))
             {
                 versions.Add((versionString, semVer));
@@ -165,7 +213,7 @@ public class DotnetCacheManager : ICacheManager
 
         if (versions.Count == 0)
         {
-            return Path.GetFileName(versionDirs[0]);
+            return versionDirs[0].GetName();
         }
 
         return versions.OrderByDescending(v => v.Version).First().Dir;
@@ -174,63 +222,78 @@ public class DotnetCacheManager : ICacheManager
     /// <summary>
     /// Finds the executable DLL in the tools directory by looking for .runtimeconfig.json files.
     /// </summary>
-    private static string? FindExecutableDll(string versionDir)
+    private async Task<string?> FindExecutableDllAsync(CanonicalPath versionDir, CancellationToken cancellationToken)
     {
-        var toolsDir = Path.Combine(versionDir, "tools");
-        if (!Directory.Exists(toolsDir))
+        var toolsDirResult = versionDir.Append("tools");
+        if (toolsDirResult.IsFailure)
+        {
+            return null;
+        }
+
+        var toolsDir = toolsDirResult.Value;
+
+        var toolsDirExistsResult = await _fileSystem.DirectoryExistsAsync(toolsDir, cancellationToken);
+        if (toolsDirExistsResult.IsFailure || !toolsDirExistsResult.Value)
         {
             return null;
         }
 
         // Search for .runtimeconfig.json files which indicate the entry point
-        var runtimeConfigFiles = Directory.GetFiles(toolsDir, "*.runtimeconfig.json", SearchOption.AllDirectories);
-        if (runtimeConfigFiles.Length == 0)
+        var runtimeConfigFilesResult = await _fileSystem.GetFilesAsync(toolsDir, "*.runtimeconfig.json", recursive: true, cancellationToken);
+        if (runtimeConfigFilesResult.IsFailure || runtimeConfigFilesResult.Value.Count == 0)
         {
             return null;
         }
 
         // Get the DLL name from the runtimeconfig filename
-        var runtimeConfigPath = runtimeConfigFiles[0];
-        var dllName = Path.GetFileNameWithoutExtension(runtimeConfigPath).Replace(".runtimeconfig", "") + ".dll";
-        var dllPath = Path.Combine(Path.GetDirectoryName(runtimeConfigPath)!, dllName);
+        var runtimeConfigPath = runtimeConfigFilesResult.Value[0];
+        var runtimeConfigName = runtimeConfigPath.GetName();
+        var dllName = runtimeConfigName.Replace(".runtimeconfig.json", ".dll");
 
-        return File.Exists(dllPath) ? dllPath : null;
-    }
-
-    /// <summary>
-    /// Gets the NuGet packages cache directory path.
-    /// </summary>
-    /// <returns>The path to the NuGet packages cache.</returns>
-    private static string GetNuGetPackagesCacheDirectory()
-    {
-        // Check NUGET_PACKAGES environment variable first
-        var nugetPackages = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
-        if (!string.IsNullOrEmpty(nugetPackages))
+        var parentResult = runtimeConfigPath.GetParent();
+        if (parentResult.IsFailure)
         {
-            return nugetPackages;
+            return null;
         }
 
-        // Default locations:
-        // Windows: %USERPROFILE%\.nuget\packages
-        // Linux/macOS: ~/.nuget/packages
-        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Path.Combine(userProfile, ".nuget", "packages");
+        var dllPathResult = parentResult.Value.Append(dllName);
+        if (dllPathResult.IsFailure)
+        {
+            return null;
+        }
+
+        var dllPath = dllPathResult.Value;
+
+        var dllExistsResult = await _fileSystem.FileExistsAsync(dllPath, cancellationToken);
+        if (dllExistsResult.IsFailure || !dllExistsResult.Value)
+        {
+            return null;
+        }
+
+        return dllPath.Value;
     }
 
     /// <summary>
     /// Checks if the package is a .NET tool by looking for DotnetTool package type in nuspec.
     /// </summary>
-    private static bool IsDotnetTool(string versionDir)
+    private async Task<bool> IsDotnetToolAsync(CanonicalPath versionDir, CancellationToken cancellationToken)
     {
         try
         {
-            var nuspecFiles = Directory.GetFiles(versionDir, "*.nuspec");
-            if (nuspecFiles.Length == 0)
+            var nuspecFilesResult = await _fileSystem.GetFilesAsync(versionDir, "*.nuspec", recursive: false, cancellationToken);
+            if (nuspecFilesResult.IsFailure || nuspecFilesResult.Value.Count == 0)
             {
                 return false;
             }
 
-            var nuspec = XDocument.Load(nuspecFiles[0]);
+            var nuspecPath = nuspecFilesResult.Value[0];
+            var nuspecContentResult = await _fileSystem.ReadAllTextAsync(nuspecPath, cancellationToken);
+            if (nuspecContentResult.IsFailure)
+            {
+                return false;
+            }
+
+            var nuspec = XDocument.Parse(nuspecContentResult.Value);
             var ns = nuspec.Root?.GetDefaultNamespace() ?? XNamespace.None;
 
             var metadata = nuspec.Root?.Element(ns + "metadata");
@@ -259,23 +322,27 @@ public class DotnetCacheManager : ICacheManager
     /// <summary>
     /// Attempts to get the tool command name from the nuspec file.
     /// </summary>
-    private static string GetToolCommand(string versionDir, string packageId)
+    private async Task<string> GetToolCommandAsync(CanonicalPath versionDir, string packageId, CancellationToken cancellationToken)
     {
         try
         {
-            // Look for nuspec file
-            var nuspecFiles = Directory.GetFiles(versionDir, "*.nuspec");
-            if (nuspecFiles.Length > 0)
+            var nuspecFilesResult = await _fileSystem.GetFilesAsync(versionDir, "*.nuspec", recursive: false, cancellationToken);
+            if (nuspecFilesResult.IsSuccess && nuspecFilesResult.Value.Count > 0)
             {
-                var nuspec = XDocument.Load(nuspecFiles[0]);
-                var ns = nuspec.Root?.GetDefaultNamespace() ?? XNamespace.None;
-
-                // Try to get tool command from metadata
-                var metadata = nuspec.Root?.Element(ns + "metadata");
-                var toolCommandName = metadata?.Element(ns + "toolCommandName")?.Value;
-                if (!string.IsNullOrEmpty(toolCommandName))
+                var nuspecPath = nuspecFilesResult.Value[0];
+                var nuspecContentResult = await _fileSystem.ReadAllTextAsync(nuspecPath, cancellationToken);
+                if (nuspecContentResult.IsSuccess)
                 {
-                    return toolCommandName;
+                    var nuspec = XDocument.Parse(nuspecContentResult.Value);
+                    var ns = nuspec.Root?.GetDefaultNamespace() ?? XNamespace.None;
+
+                    // Try to get tool command from metadata
+                    var metadata = nuspec.Root?.Element(ns + "metadata");
+                    var toolCommandName = metadata?.Element(ns + "toolCommandName")?.Value;
+                    if (!string.IsNullOrEmpty(toolCommandName))
+                    {
+                        return toolCommandName;
+                    }
                 }
             }
         }
