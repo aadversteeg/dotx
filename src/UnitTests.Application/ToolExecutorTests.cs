@@ -60,7 +60,7 @@ public class ToolExecutorTests
     public async Task TEX003()
     {
         var toolSpec = ToolSpec.Parse("my.tool");
-        var updateStarted = new TaskCompletionSource<bool>();
+        var downloadStarted = new TaskCompletionSource<bool>();
 
         _cacheManagerMock.Setup(x => x.GetToolExecutablePathAsync("my.tool", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync("/path/to/tool.dll");
@@ -68,20 +68,20 @@ public class ToolExecutorTests
             .ReturnsAsync(new InstalledTool("my.tool", "1.0.0", "my-tool"));
         _nuGetClientMock.Setup(x => x.GetLatestVersionAsync("my.tool", It.IsAny<CancellationToken>()))
             .ReturnsAsync("2.0.0");
-        _toolRunnerMock.Setup(x => x.UpdateToolAsync("my.tool", It.IsAny<CancellationToken>()))
-            .Callback(() => updateStarted.TrySetResult(true))
-            .ReturnsAsync(true);
+        _nuGetClientMock.Setup(x => x.DownloadPackageAsync("my.tool", "2.0.0", It.IsAny<CancellationToken>()))
+            .Callback(() => downloadStarted.TrySetResult(true))
+            .ReturnsAsync("2.0.0");
         _toolRunnerMock.Setup(x => x.ExecuteFromCacheAsync("/path/to/tool.dll", It.IsAny<string[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
         await _sut.ExecuteAsync(toolSpec, []);
 
         // Wait briefly for background task to start
-        var started = await Task.WhenAny(updateStarted.Task, Task.Delay(1000)) == updateStarted.Task;
-        started.Should().BeTrue("background update should have started");
+        var started = await Task.WhenAny(downloadStarted.Task, Task.Delay(1000)) == downloadStarted.Task;
+        started.Should().BeTrue("background download should have started");
     }
 
-    [Fact(DisplayName = "TEX-004: ExecuteAsync should not update when already at latest")]
+    [Fact(DisplayName = "TEX-004: ExecuteAsync should not download when already at latest")]
     public async Task TEX004()
     {
         var toolSpec = ToolSpec.Parse("my.tool");
@@ -99,7 +99,7 @@ public class ToolExecutorTests
         // Wait briefly for background task
         await Task.Delay(100);
 
-        _toolRunnerMock.Verify(x => x.UpdateToolAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _nuGetClientMock.Verify(x => x.DownloadPackageAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact(DisplayName = "TEX-005: ExecuteAsync should pass tool args to runner")]
@@ -197,9 +197,9 @@ public class ToolExecutorTests
             .ReturnsAsync((InstalledTool?)null);
         _nuGetClientMock.Setup(x => x.GetLatestVersionAsync("my.tool", It.IsAny<CancellationToken>()))
             .ReturnsAsync("1.0.0");
-        _toolRunnerMock.Setup(x => x.UpdateToolAsync("my.tool", It.IsAny<CancellationToken>()))
+        _nuGetClientMock.Setup(x => x.DownloadPackageAsync("my.tool", "1.0.0", It.IsAny<CancellationToken>()))
             .Callback(() => downloadStarted.TrySetResult(true))
-            .ReturnsAsync(true);
+            .ReturnsAsync("1.0.0");
         _toolRunnerMock.Setup(x => x.ExecuteAsync(toolSpec, It.IsAny<string[]>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 

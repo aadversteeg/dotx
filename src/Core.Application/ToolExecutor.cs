@@ -63,15 +63,18 @@ public class ToolExecutor
             toolSpec.Version,
             cancellationToken);
 
+        int result;
         if (executablePath != null)
         {
             Log($"Running from cache: {executablePath}");
-            return await _toolRunner.ExecuteFromCacheAsync(executablePath, toolArgs, cancellationToken);
+            result = await _toolRunner.ExecuteFromCacheAsync(executablePath, toolArgs, cancellationToken);
         }
-
-        // Not cached - use dotnet tool exec for auto-installation
-        Log($"Tool not cached, using dotnet tool exec for auto-installation...");
-        var result = await _toolRunner.ExecuteAsync(toolSpec, toolArgs, cancellationToken);
+        else
+        {
+            // Not cached - use dotnet tool exec for auto-installation
+            Log($"Tool not cached, using dotnet tool exec for auto-installation...");
+            result = await _toolRunner.ExecuteAsync(toolSpec, toolArgs, cancellationToken);
+        }
 
         // Wait for update task to complete if it was started
         // This ensures the latest version is cached for next run
@@ -109,10 +112,10 @@ public class ToolExecutor
             if (cachedVersion == null || IsNewerVersion(latestVersion, cachedVersion))
             {
                 Log($"Downloading {packageId}@{latestVersion} in background...");
-                var updated = await _toolRunner.UpdateToolAsync(packageId);
-                if (updated)
+                var downloadedVersion = await _nuGetClient.DownloadPackageAsync(packageId, latestVersion);
+                if (downloadedVersion != null)
                 {
-                    Log($"Downloaded {packageId}@{latestVersion} (will be used on next run)");
+                    Log($"Downloaded {packageId}@{downloadedVersion} (will be used on next run)");
                 }
             }
         }

@@ -3,26 +3,10 @@ using Core.Domain;
 namespace Core.Application;
 
 /// <summary>
-/// Provides operations for managing and executing .NET tools.
+/// Provides operations for executing .NET tools.
 /// </summary>
 public interface IToolRunner
 {
-    /// <summary>
-    /// Gets the installed version of a globally installed .NET tool.
-    /// </summary>
-    /// <param name="packageId">The NuGet package ID of the tool.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>The installed version string, or null if not installed or an error occurred.</returns>
-    Task<string?> GetInstalledVersionAsync(string packageId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Updates a globally installed .NET tool to the latest version.
-    /// </summary>
-    /// <param name="packageId">The NuGet package ID of the tool to update.</param>
-    /// <param name="cancellationToken">A token to cancel the operation.</param>
-    /// <returns>True if the update succeeded; otherwise, false.</returns>
-    Task<bool> UpdateToolAsync(string packageId, CancellationToken cancellationToken = default);
-
     /// <summary>
     /// Executes a .NET tool with the specified arguments.
     /// </summary>
