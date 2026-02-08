@@ -72,7 +72,7 @@ Configure in Claude Desktop or other MCP clients:
 ## Options
 
 | Option | Description |
-|--------|-------------|
+| ------ | ----------- |
 | `--no-update` | Skip checking for updates (pure offline mode) |
 | `--verbose` | Show detailed output |
 | `--help`, `-h` | Show help message |
@@ -89,6 +89,18 @@ dotx cache list
 # Show details for a specific tool (including all cached versions)
 dotx cache show ave.mcpserver.chronos
 
+# Download a tool to cache (for offline use)
+dotx cache add ave.mcpserver.chronos
+
+# Download a specific version to cache
+dotx cache add ave.mcpserver.chronos@1.0.0
+
+# Update all cached tools to latest version
+dotx cache update
+
+# Update a specific tool to latest version
+dotx cache update ave.mcpserver.chronos
+
 # Remove a specific tool from cache
 dotx cache remove ave.mcpserver.chronos
 
@@ -98,6 +110,17 @@ dotx cache clear
 # Remove all .NET tools from cache (skip confirmation)
 dotx cache clear -y
 ```
+
+### Cache Commands Reference
+
+| Command | Description |
+| ------- | ----------- |
+| `cache list` | List all installed tools |
+| `cache show <id>` | Show details for a specific tool |
+| `cache add <id>[@ver]` | Download a tool to cache |
+| `cache update [<id>]` | Update a tool (or all) to latest |
+| `cache remove <id>` | Remove a specific tool |
+| `cache clear [-y]` | Remove all tools |
 
 Note: The cache commands only affect .NET tools (packages with `DotnetTool` package type), not other NuGet packages.
 
