@@ -41,17 +41,25 @@ public class ToolExecutor
     /// <param name="toolSpec">The tool specification containing package ID and optional version.</param>
     /// <param name="toolArgs">The arguments to pass to the tool.</param>
     /// <param name="skipUpdate">If true, skips the background update check.</param>
+    /// <param name="forceUpdate">If true, checks for updates and downloads before running (blocking).</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The exit code from the tool execution.</returns>
     public async Task<int> ExecuteAsync(
         ToolSpec toolSpec,
         string[] toolArgs,
         bool skipUpdate = false,
+        bool forceUpdate = false,
         CancellationToken cancellationToken = default)
     {
-        // Start background update check if enabled
+        // Force update: check and download latest version before running
+        if (forceUpdate && !toolSpec.IsPinned)
+        {
+            await UpdateBeforeRunAsync(toolSpec.PackageId, cancellationToken);
+        }
+
+        // Start background update check if enabled (and not already force-updated)
         Task? updateTask = null;
-        if (!toolSpec.IsPinned && !skipUpdate)
+        if (!toolSpec.IsPinned && !skipUpdate && !forceUpdate)
         {
             // Fire and forget - update happens in background
             updateTask = UpdateInBackgroundAsync(toolSpec.PackageId);
@@ -91,6 +99,48 @@ public class ToolExecutor
         }
 
         return result;
+    }
+
+    private async Task UpdateBeforeRunAsync(string packageId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            Log($"Checking for updates...");
+
+            // Check what's in cache
+            var cachedTool = await _cacheManager.GetToolAsync(packageId, cancellationToken);
+            var cachedVersion = cachedTool?.Version;
+
+            // Check latest version on NuGet
+            var latestVersion = await _nuGetClient.GetLatestVersionAsync(packageId, cancellationToken);
+
+            if (latestVersion == null)
+            {
+                Log($"Could not determine latest version for {packageId}");
+                return;
+            }
+
+            if (cachedVersion == null)
+            {
+                Log($"Downloading {packageId}@{latestVersion}...");
+                await _nuGetClient.DownloadPackageAsync(packageId, latestVersion, cancellationToken);
+                Log($"Downloaded {packageId}@{latestVersion}");
+            }
+            else if (IsNewerVersion(latestVersion, cachedVersion))
+            {
+                Log($"Updating {packageId} from {cachedVersion} to {latestVersion}...");
+                await _nuGetClient.DownloadPackageAsync(packageId, latestVersion, cancellationToken);
+                Log($"Updated to {packageId}@{latestVersion}");
+            }
+            else
+            {
+                Log($"Already at latest version: {packageId}@{cachedVersion}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"Update check failed: {ex.Message}");
+        }
     }
 
     private async Task UpdateInBackgroundAsync(string packageId)

@@ -41,6 +41,7 @@ public class Program
         }
 
         var skipUpdate = false;
+        var forceUpdate = false;
         var verbose = false;
         var toolArgIndex = 0;
 
@@ -49,6 +50,11 @@ public class Program
             if (args[i] == "--no-update")
             {
                 skipUpdate = true;
+                toolArgIndex = i + 1;
+            }
+            else if (args[i] == "--update")
+            {
+                forceUpdate = true;
                 toolArgIndex = i + 1;
             }
             else if (args[i] == "--verbose")
@@ -91,7 +97,7 @@ public class Program
         var cacheManager = CreateCacheManager();
         var executor = new ToolExecutor(nuGetClient, toolRunner, cacheManager, logAction);
 
-        return await executor.ExecuteAsync(toolSpec, toolArgs, skipUpdate);
+        return await executor.ExecuteAsync(toolSpec, toolArgs, skipUpdate, forceUpdate);
     }
 
     /// <summary>
@@ -159,7 +165,8 @@ public class Program
         Console.Error.WriteLine("       dotx cache <command> [options]");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Options:");
-        Console.Error.WriteLine("  --no-update    Skip checking for updates");
+        Console.Error.WriteLine("  --update       Check for updates before running (blocking)");
+        Console.Error.WriteLine("  --no-update    Skip checking for updates (pure offline mode)");
         Console.Error.WriteLine("  --verbose      Show detailed output");
         Console.Error.WriteLine("  --help, -h     Show this help message");
         Console.Error.WriteLine("  --version, -v  Show version information");
@@ -175,6 +182,7 @@ public class Program
         Console.Error.WriteLine("Examples:");
         Console.Error.WriteLine("  dotx ave.mcpserver.chronos");
         Console.Error.WriteLine("  dotx ave.mcpserver.chronos@1.0.0");
+        Console.Error.WriteLine("  dotx --update ave.mcpserver.chronos");
         Console.Error.WriteLine("  dotx --no-update ave.mcpserver.chronos");
         Console.Error.WriteLine("  dotx cache list");
         Console.Error.WriteLine("  dotx cache add ave.mcpserver.chronos@1.0.0");

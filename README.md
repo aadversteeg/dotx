@@ -26,6 +26,9 @@ dotx ave.mcpserver.chronos
 # Pin to a specific version (no auto-update)
 dotx ave.mcpserver.chronos@1.0.0
 
+# Check for updates before running (blocking)
+dotx --update ave.mcpserver.chronos
+
 # Skip update check (pure offline mode)
 dotx --no-update ave.mcpserver.chronos
 
@@ -73,6 +76,7 @@ Configure in Claude Desktop or other MCP clients:
 
 | Option | Description |
 | ------ | ----------- |
+| `--update` | Check for updates before running (blocking) |
 | `--no-update` | Skip checking for updates (pure offline mode) |
 | `--verbose` | Show detailed output |
 | `--help`, `-h` | Show help message |
