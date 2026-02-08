@@ -4,6 +4,9 @@ using Core.Application;
 
 namespace Core.Infrastructure.Nuget;
 
+/// <summary>
+/// Implements <see cref="INuGetClient"/> using the NuGet.org API.
+/// </summary>
 public class NuGetClient : INuGetClient
 {
     private static readonly HttpClient HttpClient = new()
@@ -13,6 +16,7 @@ public class NuGetClient : INuGetClient
 
     private const string NuGetApiBaseUrl = "https://api.nuget.org/v3-flatcontainer";
 
+    /// <inheritdoc/>
     public async Task<string?> GetLatestVersionAsync(string packageId, CancellationToken cancellationToken = default)
     {
         try

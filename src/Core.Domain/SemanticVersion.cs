@@ -1,10 +1,28 @@
 namespace Core.Domain;
 
+/// <summary>
+/// Represents a semantic version with major, minor, patch components and optional prerelease identifier.
+/// </summary>
 public sealed class SemanticVersion : IComparable<SemanticVersion>
 {
+    /// <summary>
+    /// Gets the major version component.
+    /// </summary>
     public int Major { get; }
+
+    /// <summary>
+    /// Gets the minor version component.
+    /// </summary>
     public int Minor { get; }
+
+    /// <summary>
+    /// Gets the patch version component.
+    /// </summary>
     public int Patch { get; }
+
+    /// <summary>
+    /// Gets the prerelease identifier, or null for release versions.
+    /// </summary>
     public string? Prerelease { get; }
 
     private SemanticVersion(int major, int minor, int patch, string? prerelease)
@@ -15,6 +33,12 @@ public sealed class SemanticVersion : IComparable<SemanticVersion>
         Prerelease = prerelease;
     }
 
+    /// <summary>
+    /// Attempts to parse a version string into a <see cref="SemanticVersion"/> instance.
+    /// </summary>
+    /// <param name="version">The version string to parse (e.g., "1.2.3" or "1.2.3-preview").</param>
+    /// <param name="result">When successful, contains the parsed version; otherwise, null.</param>
+    /// <returns>True if parsing succeeded; otherwise, false.</returns>
     public static bool TryParse(string? version, out SemanticVersion? result)
     {
         result = null;
@@ -59,6 +83,7 @@ public sealed class SemanticVersion : IComparable<SemanticVersion>
         return true;
     }
 
+    /// <inheritdoc/>
     public int CompareTo(SemanticVersion? other)
     {
         if (other is null)
@@ -103,11 +128,19 @@ public sealed class SemanticVersion : IComparable<SemanticVersion>
         return 0;
     }
 
+    /// <summary>Determines whether the left version is greater than the right version.</summary>
     public static bool operator >(SemanticVersion left, SemanticVersion right) => left.CompareTo(right) > 0;
+
+    /// <summary>Determines whether the left version is less than the right version.</summary>
     public static bool operator <(SemanticVersion left, SemanticVersion right) => left.CompareTo(right) < 0;
+
+    /// <summary>Determines whether the left version is greater than or equal to the right version.</summary>
     public static bool operator >=(SemanticVersion left, SemanticVersion right) => left.CompareTo(right) >= 0;
+
+    /// <summary>Determines whether the left version is less than or equal to the right version.</summary>
     public static bool operator <=(SemanticVersion left, SemanticVersion right) => left.CompareTo(right) <= 0;
 
+    /// <inheritdoc/>
     public override string ToString() => Prerelease != null
         ? $"{Major}.{Minor}.{Patch}-{Prerelease}"
         : $"{Major}.{Minor}.{Patch}";

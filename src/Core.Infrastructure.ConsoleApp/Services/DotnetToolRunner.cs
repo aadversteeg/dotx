@@ -5,8 +5,12 @@ using Core.Domain;
 
 namespace Core.Infrastructure.ConsoleApp.Services;
 
+/// <summary>
+/// Implements <see cref="IToolRunner"/> using the dotnet CLI.
+/// </summary>
 public partial class DotnetToolRunner : IToolRunner
 {
+    /// <inheritdoc/>
     public async Task<string?> GetInstalledVersionAsync(string packageId, CancellationToken cancellationToken = default)
     {
         try
@@ -61,6 +65,7 @@ public partial class DotnetToolRunner : IToolRunner
         }
     }
 
+    /// <inheritdoc/>
     public async Task<bool> UpdateToolAsync(string packageId, CancellationToken cancellationToken = default)
     {
         try
@@ -94,6 +99,7 @@ public partial class DotnetToolRunner : IToolRunner
         }
     }
 
+    /// <inheritdoc/>
     public async Task<int> ExecuteAsync(ToolSpec toolSpec, string[] args, CancellationToken cancellationToken = default)
     {
         var startInfo = new ProcessStartInfo
@@ -118,6 +124,36 @@ public partial class DotnetToolRunner : IToolRunner
             {
                 startInfo.ArgumentList.Add(arg);
             }
+        }
+
+        using var process = Process.Start(startInfo);
+        if (process == null)
+        {
+            return 1;
+        }
+
+        await process.WaitForExitAsync(cancellationToken);
+        return process.ExitCode;
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> ExecuteFromCacheAsync(string dllPath, string[] args, CancellationToken cancellationToken = default)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            UseShellExecute = false,
+            RedirectStandardInput = false,
+            RedirectStandardOutput = false,
+            RedirectStandardError = false,
+            CreateNoWindow = true
+        };
+
+        startInfo.ArgumentList.Add(dllPath);
+
+        foreach (var arg in args)
+        {
+            startInfo.ArgumentList.Add(arg);
         }
 
         using var process = Process.Start(startInfo);
